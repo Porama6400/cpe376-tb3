@@ -36,15 +36,12 @@ class Turtlebot3Controller(Node):
 
         self.pid_linear = PidController()
         self.pid_linear.output_cap = 0.2
-        self.pid_linear.proportional_gain = 0.8
-        self.pid_linear.integral_gain = 0.5
-        self.pid_linear.integral_cap = 0.05
+        self.pid_linear.proportional_gain = 1
+        self.pid_linear.integral_gain = 0.3
 
         self.pid_angular = PidController()
         self.pid_angular.proportional_gain = 2
-        self.pid_angular.integral_gain = 0.5
-        self.pid_angular.integral_time = 8
-        self.pid_linear.integral_cap = 0.5
+        self.pid_angular.integral_gain = 0.3
         self.pid_angular.output_cap = 2
 
         self.stab_angular = StabChecker(5, 0.005)
@@ -53,26 +50,28 @@ class Turtlebot3Controller(Node):
 
         self.last_delta_distance: float = 0
         self.waypoint_controller = WaypointController()
-
         self.waypoint_controller.go_to(300)
-        self.waypoint_controller.turn_to(-1210)
 
-        self.waypoint_controller.go_to(250)
-        self.waypoint_controller.turn_to(270)
+        self.waypoint_controller.turn_to(900)
+        self.waypoint_controller.go_to(300)
 
-        self.waypoint_controller.go_to(50)
-        self.waypoint_controller.turn_to(-450)
+        self.waypoint_controller.turn_to(-900)
+        self.waypoint_controller.go_to(300)
 
-        self.waypoint_controller.go_to(50)
-        self.waypoint_controller.turn_to(-650)
+        self.waypoint_controller.turn_to(900)
+        self.waypoint_controller.go_to(300)
 
-        self.waypoint_controller.go_to(100)
-        self.waypoint_controller.turn_to(850)
+        self.waypoint_controller.turn_to(1800)
+        self.waypoint_controller.go_to(300)
 
-        self.waypoint_controller.go_to(100)
-        self.waypoint_controller.turn_to(-500)
+        self.waypoint_controller.turn_to(-900)
+        self.waypoint_controller.go_to(300)
 
-        self.waypoint_controller.go_to(120)
+        self.waypoint_controller.turn_to(900)
+        self.waypoint_controller.go_to(300)
+
+        self.waypoint_controller.turn_to(-900)
+        self.waypoint_controller.go_to(300)
 
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
@@ -170,7 +169,6 @@ class PidController(object):
         self.proportional_gain: float = 0.5
         self.integral_gain: float = 0.3
         self.integral_time: int = 10
-        self.integral_cap: float = 0.1
         self.derivative_gain: float = 0
         self.derivative_time: int = 15
 
@@ -197,13 +195,7 @@ class PidController(object):
         for e in range(self.integral_time):
             accu += self.history_array[e] * self.time_delta
 
-        accu *= self.integral_gain
-        if accu > self.integral_cap:
-            accu = self.integral_cap
-        elif accu < -self.integral_cap:
-            accu = -self.integral_cap
-
-        return accu
+        return accu * self.integral_gain
 
     def calculate_derivative(self) -> float:
         if self.derivative_gain == 0:
@@ -319,7 +311,7 @@ class WaypointController(object):
         self.builder_current_angle: float = 0
 
     def turn_to(self, angle: int):
-        self.builder_current_angle = angle_normalize(self.builder_current_angle + (angle / 180 * math.pi))
+        self.builder_current_angle = angle_normalize(self.builder_current_angle + (angle / 1800 * math.pi))
 
     def go_to(self, distance_mm: int):
         distance = distance_mm / 1000
