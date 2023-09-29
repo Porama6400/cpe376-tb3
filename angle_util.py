@@ -22,6 +22,18 @@ def angle_calculate_delta(rad_a: float, rad_b: float):
         return (rad_b + PI2) - rad_a
 
 
+def angle_nearest_range(data: list, deg_a: int, deg_b: int) -> int:
+    min_value = 1000000
+    min_index = -1
+    for i in range(deg_a, deg_b):
+        val = data[i]
+        if 0 < val < min_value:
+            min_value = val
+            min_index = i
+
+    return min_index
+
+
 def angle_distance(data: list, a: int, b: int) -> float:
     last = 1000000
     r = range(a, b)
@@ -32,6 +44,7 @@ def angle_distance(data: list, a: int, b: int) -> float:
         if last > data[index] > 0.01:
             last = data[index]
     return last
+
 
 class TestAngleUtil(unittest.TestCase):
 
