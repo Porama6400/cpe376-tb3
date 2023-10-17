@@ -33,6 +33,17 @@ class Vector(object):
     def angle_toward(self, other):
         return math.atan2(other.y - self.y, other.x - self.x)
 
+    def rotate(self, angle: float):
+        x_new = self.x * math.cos(angle) - self.y * math.sin(angle)
+        y_new = self.x * math.sin(angle) + self.y * math.cos(angle)
+        self.x = x_new
+        self.y = y_new
+
+    def pivot_origin(self, center, angle: float):
+        self.x -= center.x
+        self.y -= center.y
+        self.rotate(angle)
+
 
 class TestPosition(TestCase):
     def test_add(self):
@@ -42,3 +53,8 @@ class TestPosition(TestCase):
     def test_sub(self):
         subtracted = Vector(1, 3) - Vector(5, 8)
         self.assertTrue(subtracted == Vector(-4, -5))
+
+    def test_sub(self):
+        vector = Vector(10, 0)
+        vector.pivot_origin(Vector(9, 0), math.pi)
+        print(vector)
