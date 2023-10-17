@@ -48,9 +48,6 @@ class Turtlebot3Controller(Node):
         self.pid_linear.integral_cap = 0.1
         self.pid_angular.output_cap = 2
 
-        self.last_pos = None
-        self.distance_travelled = 0.0
-
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
         msg.linear.x = linearVelocity
@@ -77,37 +74,15 @@ class Turtlebot3Controller(Node):
         self.valueRotation = math.atan2(siny_cosp, cosy_cosp)
 
     def timerCallback(self):
-        if self.last_pos is not None:
-            distance_travelled_tick = math.sqrt(
-                math.pow(self.valuePosition.x - self.last_pos.x, 2)
-                + math.pow(self.valuePosition.y - self.last_pos.y, 2)
-            )
-            self.distance_travelled += distance_travelled_tick
+        dist_right = angle_distance(self.valueLaserRanges, 210, 330)
+        dist_front = angle_distance(self.valueLaserRanges, -15, 15)
+        dist_left = angle_distance(self.valueLaserRanges, 75, 105)
 
-        if self.distance_travelled > 5:
-            self.publishVelocityCommand(0.0, 0.0)
-            return
-
-        self.last_pos = self.valuePosition
-        nearest_index_left = angle_nearest_range(self.valueLaserRanges, 10, 170)
-        nearest_delta_left = (nearest_index_left - 90) / 180 * math.pi
-        nearest_distance_left = self.valueLaserRanges[nearest_index_left]
-        nearest_index_right = angle_nearest_range(self.valueLaserRanges,
-                                                  nearest_index_left + 170,
-                                                  nearest_index_left + 190
-                                                  )
-        nearest_distance_right = self.valueLaserRanges[nearest_index_right]
-        delta_offset = (nearest_distance_left - 0.3) * 5
-        target_angle = float(nearest_delta_left + delta_offset)
-        print("target_angle", target_angle)
-        turn_amount = self.pid_angular.tick(target_angle)
-
-        print("nearest", nearest_delta_left)
-        print("nearest_dist", self.valueLaserRanges[nearest_index_left])
-        print("delta_offset", delta_offset)
-        print("distance_travelled", self.distance_travelled)
-        print("speed", turn_amount)
-        self.publishVelocityCommand(float(0.1), float(turn_amount))
+        print("detect", dist_right, dist_front)
+        speed_linear = self.pid_linear.tick(dist_front - 0.3)
+        speed_angular = self.pid_angular.tick((-dist_right + 0.2) * 5)
+        print("speed", speed_linear, speed_angular)
+        self.publishVelocityCommand(float(speed_linear), float(speed_angular))
 
 
 def robotStop():
@@ -125,8 +100,8 @@ def main(args=None):
     print('tb3ControllerNode created')
     try:
         rclpy.spin(tb3ControllerNode)
-    except KeyboardInterrupt:
-        pass
+    except:
+        KeyboardInterrupt
     print('Done')
 
     tb3ControllerNode.publishVelocityCommand(0.0, 0.0)
@@ -240,18 +215,3 @@ def angle_distance(data: list, a: int, b: int) -> float:
         if last > data[index] > 0.01:
             last = data[index]
     return last
-
-
-def angle_nearest_range(data: list, deg_a: int, deg_b: int) -> int:
-    min_value = 1000000
-    min_index = -1
-    for i in range(deg_a, deg_b):
-        val = data[i]
-        if 0 < val < min_value:
-            min_value = val
-            min_index = i
-
-    return min_index
-
-
-#flak emplacement pid_controller

@@ -39,12 +39,6 @@ class Vector(object):
         self.x = x_new
         self.y = y_new
 
-    def pivot_origin(self, center, angle: float):
-        self.x -= center.x
-        self.y -= center.y
-        self.rotate(angle)
-
-
 class TestPosition(TestCase):
     def test_add(self):
         added = Vector(1, 3) + Vector(5, 8)

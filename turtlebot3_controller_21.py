@@ -84,7 +84,7 @@ class Turtlebot3Controller(Node):
             )
             self.distance_travelled += distance_travelled_tick
 
-        if self.distance_travelled > 5:
+        if self.distance_travelled > 1:
             self.publishVelocityCommand(0.0, 0.0)
             return
 
@@ -92,22 +92,15 @@ class Turtlebot3Controller(Node):
         nearest_index_left = angle_nearest_range(self.valueLaserRanges, 10, 170)
         nearest_delta_left = (nearest_index_left - 90) / 180 * math.pi
         nearest_distance_left = self.valueLaserRanges[nearest_index_left]
-        nearest_index_right = angle_nearest_range(self.valueLaserRanges,
-                                                  nearest_index_left + 170,
-                                                  nearest_index_left + 190
-                                                  )
-        nearest_distance_right = self.valueLaserRanges[nearest_index_right]
-        delta_offset = (nearest_distance_left - 0.3) * 5
-        target_angle = float(nearest_delta_left + delta_offset)
-        print("target_angle", target_angle)
-        turn_amount = self.pid_angular.tick(target_angle)
+        nearest_distance_right = self.valueLaserRanges[nearest_index_left + 180]
 
+        delta_offset = self.pid_distance.tick(nearest_distance_left - nearest_distance_right)
         print("nearest", nearest_delta_left)
         print("nearest_dist", self.valueLaserRanges[nearest_index_left])
         print("delta_offset", delta_offset)
         print("distance_travelled", self.distance_travelled)
-        print("speed", turn_amount)
-        self.publishVelocityCommand(float(0.1), float(turn_amount))
+        turn_amount = float(nearest_delta_left + delta_offset)
+        self.publishVelocityCommand(float(0.15 - abs(turn_amount)), turn_amount)
 
 
 def robotStop():
@@ -125,8 +118,8 @@ def main(args=None):
     print('tb3ControllerNode created')
     try:
         rclpy.spin(tb3ControllerNode)
-    except KeyboardInterrupt:
-        pass
+    except:
+        KeyboardInterrupt
     print('Done')
 
     tb3ControllerNode.publishVelocityCommand(0.0, 0.0)
@@ -252,6 +245,3 @@ def angle_nearest_range(data: list, deg_a: int, deg_b: int) -> int:
             min_index = i
 
     return min_index
-
-
-#flak emplacement pid_controller
