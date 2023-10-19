@@ -34,6 +34,45 @@ class Turtlebot3Controller(Node):
         # Use this timer for the job that should be looping until interrupted
         self.timer = self.create_timer(0.1, self.timerCallback)
 
+        self.pid_linear = PidController()
+        self.pid_linear.output_cap = 0.2
+        self.pid_linear.proportional_gain = 1
+        self.pid_linear.integral_gain = 0.3
+
+        self.pid_angular = PidController()
+        self.pid_angular.proportional_gain = 2
+        self.pid_angular.integral_gain = 0.3
+        self.pid_angular.output_cap = 2
+
+        self.stab_angular = StabChecker(5, 0.005)
+        self.stab_linear = StabChecker(5, 0.005)
+        self.state = 0
+
+        self.last_delta_distance: float = 0
+        self.waypoint_controller = WaypointController()
+        self.waypoint_controller.go_to(300)
+
+        self.waypoint_controller.turn_to(900)
+        self.waypoint_controller.go_to(300)
+
+        self.waypoint_controller.turn_to(-900)
+        self.waypoint_controller.go_to(300)
+
+        self.waypoint_controller.turn_to(900)
+        self.waypoint_controller.go_to(300)
+
+        self.waypoint_controller.turn_to(1800)
+        self.waypoint_controller.go_to(300)
+
+        self.waypoint_controller.turn_to(-900)
+        self.waypoint_controller.go_to(300)
+
+        self.waypoint_controller.turn_to(900)
+        self.waypoint_controller.go_to(300)
+
+        self.waypoint_controller.turn_to(-900)
+        self.waypoint_controller.go_to(300)
+
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
         msg.linear.x = linearVelocity
@@ -60,16 +99,40 @@ class Turtlebot3Controller(Node):
         self.valueRotation = math.atan2(siny_cosp, cosy_cosp)
 
     def timerCallback(self):
-        dist_threshold = 0.3
-        dist_right = angle_distance(self.valueLaserRanges, 255, 285)
-        dist_front = angle_distance(self.valueLaserRanges, -15, 15)
-        dist_left = angle_distance(self.valueLaserRanges, 75, 105)
-        dist_back = angle_distance(self.valueLaserRanges, 165, 195)
+        print("tick")
+        vec_pos = Vector(self.valuePosition.x, self.valuePosition.y)
+        print("pos", vec_pos, self.valueRotation)
 
-        print(dist_left, dist_front, dist_right, dist_back)
-        print("\t", dist_front < dist_threshold)
-        print(dist_left < dist_threshold, "\t\t", dist_right < dist_threshold)
-        print("\t", dist_back < dist_threshold)
+        self.waypoint_controller.tick(vec_pos, self.valueRotation)
+
+        delta_distance = self.waypoint_controller.delta_distance_ndir
+        delta_angle = self.waypoint_controller.delta_angle
+        print("delta", delta_distance, delta_angle)
+
+        if self.state == 0:
+            delta_distance = 0
+            if self.stab_angular.tick(self.waypoint_controller.delta_angle):
+                self.state = 1
+        elif self.state == 1:
+            delta_angle = 0
+            if self.stab_linear.tick(self.waypoint_controller.delta_distance_ndir):
+                self.waypoint_controller.next()
+                print("next")
+                self.state = 0
+
+        print("state", self.state)
+
+        self.last_delta_distance = delta_distance
+
+        # if self.waypoint_controller.delta_distance < 0.03:
+        #     delta_angle = 0
+
+        print("desired", self.waypoint_controller.desired_position)
+
+        speed_linear = self.pid_linear.tick(delta_distance)
+        speed_angular = self.pid_angular.tick(delta_angle)
+        print("speed", speed_linear, speed_angular)
+        self.publishVelocityCommand(float(speed_linear), float(speed_angular))
 
 
 def robotStop():
@@ -87,10 +150,8 @@ def main(args=None):
     print('tb3ControllerNode created')
     try:
         rclpy.spin(tb3ControllerNode)
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        print(e)
+    except:
+        KeyboardInterrupt
     print('Done')
 
     tb3ControllerNode.publishVelocityCommand(0.0, 0.0)
@@ -102,4 +163,8 @@ def main(args=None):
 if __name__ == '__main__':
     main()
 
+# flak emplacement pid_controller
+# flak emplacement vector
+# flak emplacement waypoint
+# flak emplacement stab_checker
 # flak emplacement angle_util

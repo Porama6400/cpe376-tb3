@@ -14,6 +14,9 @@ class MaysonController(object):
 
         self.target_position: Vector = Vector(0, 0)
 
+        self.delta_distance: Vector
+        self.delta_angle: float
+
     def tare(self, zero_origin: Vector, zero_angle: float):
         self.zero_origin = zero_origin
         self.zero_angle = zero_angle
@@ -28,7 +31,8 @@ class MaysonController(object):
         self.actual_heading = heading - self.zero_angle
 
     def tick(self):
-        delta = self.target_position - self.actual_position
+        self.delta_distance = self.actual_position.euclidean_distance(self.target_position)
+        self.delta_angle = self.actual_position.angle_toward(self.target_position)
 
 
 class TestController(unittest.TestCase):

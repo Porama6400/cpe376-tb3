@@ -12,6 +12,12 @@ from nav_msgs.msg import Odometry
 
 import math
 
+# flak omit
+from angle_util import angle_nearest_range
+from pid_controller import PidController
+
+
+# flak unomit
 
 class Turtlebot3Controller(Node):
 
@@ -33,6 +39,23 @@ class Turtlebot3Controller(Node):
         self.state = 0
         # Use this timer for the job that should be looping until interrupted
         self.timer = self.create_timer(0.1, self.timerCallback)
+
+        self.pid_linear = PidController()
+        self.pid_linear.output_cap = 0.1
+        self.pid_linear.proportional_gain = 0.8
+        self.pid_linear.integral_gain = 0.5
+        self.pid_linear.integral_cap = 0.03
+        self.pid_linear.integral_time = 8
+
+        self.pid_angular = PidController()
+        self.pid_angular.proportional_gain = 1
+        self.pid_angular.integral_gain = 0.5
+        self.pid_angular.integral_time = 8
+        self.pid_linear.integral_cap = 0.1
+        self.pid_angular.output_cap = 2
+
+        self.last_pos = None
+        self.distance_travelled = 0.0
 
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
@@ -60,16 +83,30 @@ class Turtlebot3Controller(Node):
         self.valueRotation = math.atan2(siny_cosp, cosy_cosp)
 
     def timerCallback(self):
-        dist_threshold = 0.3
-        dist_right = angle_distance(self.valueLaserRanges, 255, 285)
-        dist_front = angle_distance(self.valueLaserRanges, -15, 15)
-        dist_left = angle_distance(self.valueLaserRanges, 75, 105)
-        dist_back = angle_distance(self.valueLaserRanges, 165, 195)
+        if self.last_pos is not None:
+            distance_travelled_tick = math.sqrt(
+                math.pow(self.valuePosition.x - self.last_pos.x, 2)
+                + math.pow(self.valuePosition.y - self.last_pos.y, 2)
+            )
+            self.distance_travelled += distance_travelled_tick
 
-        print(dist_left, dist_front, dist_right, dist_back)
-        print("\t", dist_front < dist_threshold)
-        print(dist_left < dist_threshold, "\t\t", dist_right < dist_threshold)
-        print("\t", dist_back < dist_threshold)
+        if self.distance_travelled > 1:
+            self.publishVelocityCommand(0.0, 0.0)
+            return
+
+        self.last_pos = self.valuePosition
+        nearest_index_left = angle_nearest_range(self.valueLaserRanges, 10, 170)
+        nearest_delta_left = (nearest_index_left - 90) / 180 * math.pi
+        nearest_distance_left = self.valueLaserRanges[nearest_index_left]
+        nearest_distance_right = self.valueLaserRanges[nearest_index_left + 180]
+
+        delta_offset = self.pid_distance.tick(nearest_distance_left - nearest_distance_right)
+        print("nearest", nearest_delta_left)
+        print("nearest_dist", self.valueLaserRanges[nearest_index_left])
+        print("delta_offset", delta_offset)
+        print("distance_travelled", self.distance_travelled)
+        turn_amount = float(nearest_delta_left + delta_offset)
+        self.publishVelocityCommand(float(0.15 - abs(turn_amount)), turn_amount)
 
 
 def robotStop():
@@ -87,10 +124,8 @@ def main(args=None):
     print('tb3ControllerNode created')
     try:
         rclpy.spin(tb3ControllerNode)
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        print(e)
+    except:
+        KeyboardInterrupt
     print('Done')
 
     tb3ControllerNode.publishVelocityCommand(0.0, 0.0)
@@ -102,4 +137,5 @@ def main(args=None):
 if __name__ == '__main__':
     main()
 
+# flak emplacement pid_controller
 # flak emplacement angle_util

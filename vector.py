@@ -2,6 +2,7 @@ import math
 from unittest import TestCase
 
 
+# flak export
 class Vector(object):
     PRECISION = 0.001
 
@@ -38,6 +39,9 @@ class Vector(object):
         y_new = self.x * math.sin(angle) + self.y * math.cos(angle)
         self.x = x_new
         self.y = y_new
+
+
+# flak end
 
 class TestPosition(TestCase):
     def test_add(self):

@@ -5,6 +5,7 @@ from vector import Vector
 from angle_util import angle_normalize, angle_calculate_delta
 
 
+# flak export
 class WaypointController(object):
     def __init__(self):
         self.desired_position_previous: Vector | None = None
@@ -63,6 +64,7 @@ class WaypointController(object):
         else:
             self.delta_distance_ndir = 0
 
+# flak end
 class TestWaypointController(TestCase):
     def test_calibration(self):
         controller = WaypointController()

@@ -135,61 +135,6 @@ def main(args=None):
 if __name__ == '__main__':
     main()
 
-PI2 = math.pi * 2
+# flak emplacement angle_util
 
-
-def angle_normalize(rad: float) -> float:
-    while rad < 0:
-        rad += PI2
-    while rad > PI2:
-        rad -= PI2
-    return rad
-
-
-def angle_calculate_delta(rad_a: float, rad_b: float):
-    delta = rad_b - rad_a
-    if abs(delta) <= math.pi:
-        return delta
-    elif rad_a < rad_b:
-        return rad_b - (rad_a + PI2)
-    else:
-        return (rad_b + PI2) - rad_a
-
-
-def angle_distance(data: list, a: int, b: int) -> float:
-    last = 1000000
-    r = range(a, b)
-    for index in r:
-        if index < 0:
-            index += 360
-        if last > data[index] > 0.01:
-            last = data[index]
-    return last
-
-
-def sussy_activation_linear(val: float, low: float, high: float) -> float:
-    if low > high:
-        return 1 - sussy_activation_linear(val, high, low)
-    if val < low:
-        return 0
-    if val > high:
-        return 1
-    return (val - low) / (high - low)
-
-
-def sussy_add(to, add, multiplier: float = 1):
-    for i in range(0, len(to)):
-        to[i] += add[i] * multiplier
-
-
-def sussy_multiply(to, multiplier):
-    for i in range(0, len(to)):
-        to[i] *= multiplier[i]
-
-
-def sussy_cap_abs(to, cap):
-    for i in range(0, len(to)):
-        if to[i] > cap[i]:
-            to[i] = cap[i]
-        elif to[i] < -cap[i]:
-            to[i] = -cap[i]
+# flak emplacement sussy

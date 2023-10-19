@@ -1,3 +1,4 @@
+# flak export
 def sussy_activation_linear(val: float, low: float, high: float) -> float:
     if low > high:
         return 1 - sussy_activation_linear(val, high, low)

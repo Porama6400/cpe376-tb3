@@ -1,3 +1,4 @@
+# flak export
 class StabChecker(object):
     def __init__(self, size: int, threshold: float):
         self.size = size
