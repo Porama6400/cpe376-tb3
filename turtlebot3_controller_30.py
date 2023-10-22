@@ -13,8 +13,11 @@ from nav_msgs.msg import Odometry
 import math
 
 # flak omit
-from angle_util import angle_nearest_range
+from angle_util import angle_correction_min
+from arrayaverage import ArrayAverage
 from pid_controller import PidController
+from mayson_controller import MaysonController
+from vector import Vector
 
 
 # flak unomit
@@ -54,8 +57,12 @@ class Turtlebot3Controller(Node):
         self.pid_linear.integral_cap = 0.1
         self.pid_angular.output_cap = 2
 
-        self.last_pos = None
-        self.distance_travelled = 0.0
+        self.controller = MaysonController()
+        self.tick_counter = 0
+
+        self.array_average = ArrayAverage()
+
+        self.sensor_angle_offset = -12
 
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
@@ -83,30 +90,37 @@ class Turtlebot3Controller(Node):
         self.valueRotation = math.atan2(siny_cosp, cosy_cosp)
 
     def timerCallback(self):
-        if self.last_pos is not None:
-            distance_travelled_tick = math.sqrt(
-                math.pow(self.valuePosition.x - self.last_pos.x, 2)
-                + math.pow(self.valuePosition.y - self.last_pos.y, 2)
-            )
-            self.distance_travelled += distance_travelled_tick
+        self.tick_counter += 1
+        ros_pos = Vector(self.valuePosition.x, self.valuePosition.y)
+        self.controller.update_current_position(ros_pos, self.valueRotation)
+        self.controller.tick()
 
-        if self.distance_travelled > 1:
-            self.publishVelocityCommand(0.0, 0.0)
-            return
+        if self.tick_counter < 10:
+            self.array_average.tick(self.valueLaserRanges)
 
-        self.last_pos = self.valuePosition
-        nearest_index_left = angle_nearest_range(self.valueLaserRanges, 10, 170)
-        nearest_delta_left = (nearest_index_left - 90) / 180 * math.pi
-        nearest_distance_left = self.valueLaserRanges[nearest_index_left]
-        nearest_distance_right = self.valueLaserRanges[nearest_index_left + 180]
+        if self.tick_counter == 10:
+            averaged_data = self.array_average.average()
+            offset_angle = angle_correction_min(averaged_data, 90 + self.sensor_angle_offset, 30)
 
-        delta_offset = self.pid_distance.tick(nearest_distance_left - nearest_distance_right)
-        print("nearest", nearest_delta_left)
-        print("nearest_dist", self.valueLaserRanges[nearest_index_left])
-        print("delta_offset", delta_offset)
-        print("distance_travelled", self.distance_travelled)
-        turn_amount = float(nearest_delta_left + delta_offset)
-        self.publishVelocityCommand(float(0.15 - abs(turn_amount)), turn_amount)
+            self.controller.set_zero(ros_pos, self.valueRotation + (offset_angle / 180 * math.pi))
+            self.controller.set_target(Vector(1.0, 0.0))
+            print("calibrated")
+
+        print("tick")
+        speed = self.pid_linear.tick(self.controller.delta_distance)
+        angle = self.pid_angular.tick(self.controller.delta_angle)
+        if self.tick_counter > 10:
+            if self.controller.target_distance() > 0.01:
+                self.publishVelocityCommand(float(speed), float(angle))
+            else:
+                self.publishVelocityCommand(float(0), float(0))
+        else:
+            self.publishVelocityCommand(float(0), float(0))
+
+        print("==========")
+        print(self.controller.actual_position, self.controller.actual_heading)
+        print(self.controller.target_position)
+        print(speed, angle)
 
 
 def robotStop():
@@ -124,8 +138,10 @@ def main(args=None):
     print('tb3ControllerNode created')
     try:
         rclpy.spin(tb3ControllerNode)
-    except:
-        KeyboardInterrupt
+    except KeyboardInterrupt as ki:
+        print("KI")
+    except Exception as ex:
+        print(ex)
     print('Done')
 
     tb3ControllerNode.publishVelocityCommand(0.0, 0.0)
@@ -137,5 +153,8 @@ def main(args=None):
 if __name__ == '__main__':
     main()
 
-# flak emplacement pid_controller
+# flak emplacement vector
 # flak emplacement angle_util
+# flak emplacement pid_controller
+# flak emplacement mayson_controller
+# flak emplacement arrayaverage

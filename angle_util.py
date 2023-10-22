@@ -48,7 +48,25 @@ def angle_distance(data: list, a: int, b: int) -> float:
     return last
 
 
-# flak end
+def angle_correction_min(data: list, center: int, margin: int):
+    min_value = 1000000
+    min_index = -1
+    for index in range(center - margin, center + margin):
+        list_index = index
+        if list_index < 0:
+            list_index += len(data)
+        value = data[list_index]
+        if value < 0.01:
+            continue
+        if value > 100000:
+            continue
+        if value < min_value:
+            min_value = value
+            min_index = index
+    return min_index - center
+
+
+# flak noexport
 
 class TestAngleUtil(unittest.TestCase):
 
@@ -67,6 +85,10 @@ class TestAngleUtil(unittest.TestCase):
         self.assertAlmostEqual(angle_distance(data, -2, 2), 0.1)
         self.assertAlmostEqual(angle_distance(data, 0, 3), 0.1)
         self.assertAlmostEqual(angle_distance(data, 3, 6), 0.2)
+
+    def test_angle_correction_min(self):
+        data = [0.5, 0.4, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.2]
+        print(angle_correction_min(data, 1, 2))
 
 
 if __name__ == '__main__':
