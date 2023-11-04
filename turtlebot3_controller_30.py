@@ -14,10 +14,11 @@ import math
 
 # flak omit
 from angle_util import angle_correction_min
-from arrayaverage import ArrayAverage
+from array_average import ArrayAverage
 from pid_controller import PidController
 from mayson_controller import MaysonController
 from vector import Vector
+from griddle import *
 
 
 # flak unomit
@@ -61,8 +62,11 @@ class Turtlebot3Controller(Node):
         self.tick_counter = 0
 
         self.array_average = ArrayAverage()
+        self.griddle = Griddle(self.controller)
+        self.griddle.enqueue(GRIDDLE_F1)
+        self.griddle.enqueue(GRIDDLE_F1)
 
-        self.sensor_angle_offset = -12
+        self.sensor_angle_offset = -18
 
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
@@ -95,32 +99,18 @@ class Turtlebot3Controller(Node):
         self.controller.update_current_position(ros_pos, self.valueRotation)
         self.controller.tick()
 
-        if self.tick_counter < 10:
-            self.array_average.tick(self.valueLaserRanges)
-
-        if self.tick_counter == 10:
-            averaged_data = self.array_average.average()
-            offset_angle = angle_correction_min(averaged_data, 90 + self.sensor_angle_offset, 30)
-
-            self.controller.set_zero(ros_pos, self.valueRotation + (offset_angle / 180 * math.pi))
-            self.controller.set_target(Vector(1.0, 0.0))
-            print("calibrated")
 
         print("tick")
+        self.griddle.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
+        self.controller.tick()
         speed = self.pid_linear.tick(self.controller.delta_distance)
         angle = self.pid_angular.tick(self.controller.delta_angle)
-        if self.tick_counter > 10:
-            if self.controller.target_distance() > 0.01:
-                self.publishVelocityCommand(float(speed), float(angle))
-            else:
-                self.publishVelocityCommand(float(0), float(0))
-        else:
-            self.publishVelocityCommand(float(0), float(0))
 
         print("==========")
         print(self.controller.actual_position, self.controller.actual_heading)
         print(self.controller.target_position)
         print(speed, angle)
+        self.publishVelocityCommand(float(speed), float(angle))
 
 
 def robotStop():
@@ -157,4 +147,6 @@ if __name__ == '__main__':
 # flak emplacement angle_util
 # flak emplacement pid_controller
 # flak emplacement mayson_controller
-# flak emplacement arrayaverage
+# flak emplacement array_average
+# flak emplacement griddle
+# flak emplacement stab_checker

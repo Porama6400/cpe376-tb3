@@ -1,3 +1,4 @@
+# flak export
 SIDE_RIGHT = 0
 SIDE_TOP = 1
 SIDE_LEFT = 2
@@ -38,6 +39,8 @@ class SolverWorld(object):
     def get(self, x: int, y: int, side: int):
         return self.data[self.calculate_index(x, y, side)]
 
+
+# flak noexport
 
 world = SolverWorld(4, 3)
 print(world.calculate_index(2, 2, SIDE_LEFT))

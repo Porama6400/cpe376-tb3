@@ -6,6 +6,7 @@ class StabChecker(object):
         self.values: list[float] = []
 
     def tick(self, value: float) -> bool:
+        value = abs(value)
         self.values.append(value)
         if len(self.values) > self.size:
             self.values.pop(0)

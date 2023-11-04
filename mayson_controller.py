@@ -3,6 +3,7 @@ import unittest
 
 from angle_util import angle_calculate_delta
 from vector import Vector
+from stab_checker import StabChecker
 
 
 # flak export
@@ -14,6 +15,7 @@ class MaysonController(object):
 
     def __init__(self):
         self.mode = MaysonController.MODE_POSITION
+        self.angular_stab_checker = StabChecker(10, 0.05)
 
         self.zero_origin: Vector = Vector(0, 0)
         self.zero_angle: float = 0.0
@@ -39,7 +41,7 @@ class MaysonController(object):
         self.actual_position = self.normalize_position(ros_pos)
         self.actual_heading = heading - self.zero_angle
 
-    def target_distance(self):
+    def calculate_target_distance(self):
         return self.actual_position.euclidean_distance(self.target_position)
 
     def tick(self):
@@ -47,11 +49,14 @@ class MaysonController(object):
         self.target_angle = self.actual_position.angle_toward(self.target_position)
         self.delta_angle = angle_calculate_delta(self.actual_heading, self.target_angle)
 
-        if abs(self.delta_angle) > 0.2 or self.mode == MaysonController.MODE_HEADING:
+        if not self.angular_stab_checker.tick(self.delta_angle) or self.mode == MaysonController.MODE_HEADING:
             self.delta_distance = 0.0
 
     def set_target(self, target):
         self.target_position = target
+
+    def check_finished(self):
+        pass
 
 
 # flak noexport
