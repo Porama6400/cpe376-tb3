@@ -16,9 +16,8 @@ import math
 from angle_util import angle_correction_min
 from array_average import ArrayAverage
 from pid_controller import PidController
-from mayson_controller import MaysonController
+from mayson_controller import *
 from vector import Vector
-from griddle import *
 
 
 # flak unomit
@@ -59,14 +58,10 @@ class Turtlebot3Controller(Node):
         self.pid_angular.output_cap = 2
 
         self.controller = MaysonController()
+        self.controller.enqueue(MC_ZERO)
+        self.controller.enqueue(MC_FWD)
+        self.controller.enqueue(MC_FWD)
         self.tick_counter = 0
-
-        self.array_average = ArrayAverage()
-        self.griddle = Griddle(self.controller)
-        self.griddle.enqueue(GRIDDLE_F1)
-        self.griddle.enqueue(GRIDDLE_F1)
-
-        self.sensor_angle_offset = -18
 
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
@@ -96,19 +91,12 @@ class Turtlebot3Controller(Node):
     def timerCallback(self):
         self.tick_counter += 1
         ros_pos = Vector(self.valuePosition.x, self.valuePosition.y)
-        self.controller.update_current_position(ros_pos, self.valueRotation)
-        self.controller.tick()
-
-
-        print("tick")
-        self.griddle.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
-        self.controller.tick()
+        self.controller.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
         speed = self.pid_linear.tick(self.controller.delta_distance)
         angle = self.pid_angular.tick(self.controller.delta_angle)
 
         print("==========")
         print(self.controller.actual_position, self.controller.actual_heading)
-        print(self.controller.target_position)
         print(speed, angle)
         self.publishVelocityCommand(float(speed), float(angle))
 
@@ -148,5 +136,4 @@ if __name__ == '__main__':
 # flak emplacement pid_controller
 # flak emplacement mayson_controller
 # flak emplacement array_average
-# flak emplacement griddle
 # flak emplacement stab_checker

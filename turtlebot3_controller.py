@@ -49,14 +49,10 @@ class Turtlebot3Controller(Node):
         self.pid_angular.output_cap = 2
 
         self.controller = MaysonController()
+        self.controller.enqueue(MC_ZERO)
+        self.controller.enqueue(MC_FWD)
+        self.controller.enqueue(MC_FWD)
         self.tick_counter = 0
-
-        self.array_average = ArrayAverage()
-        self.griddle = Griddle(self.controller)
-        self.griddle.enqueue(GRIDDLE_F1)
-        self.griddle.enqueue(GRIDDLE_F1)
-
-        self.sensor_angle_offset = -18
 
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
@@ -86,19 +82,12 @@ class Turtlebot3Controller(Node):
     def timerCallback(self):
         self.tick_counter += 1
         ros_pos = Vector(self.valuePosition.x, self.valuePosition.y)
-        self.controller.update_current_position(ros_pos, self.valueRotation)
-        self.controller.tick()
-
-
-        print("tick")
-        self.griddle.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
-        self.controller.tick()
+        self.controller.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
         speed = self.pid_linear.tick(self.controller.delta_distance)
         angle = self.pid_angular.tick(self.controller.delta_angle)
 
         print("==========")
         print(self.controller.actual_position, self.controller.actual_heading)
-        print(self.controller.target_position)
         print(speed, angle)
         self.publishVelocityCommand(float(speed), float(angle))
 
@@ -171,6 +160,9 @@ class Vector(object):
         self.x = x_new
         self.y = y_new
 
+    def clone(self):
+        return Vector(self.x, self.y)
+
 
 # flak end: vector.py
 # flak: angle_util.py
@@ -206,6 +198,11 @@ def angle_nearest_range(data: list, deg_a: int, deg_b: int) -> int:
             min_index = i
 
     return min_index
+
+
+def angle_nearest_range_relative(data: list, deg_center: int, deg_arc: int) -> int:
+    val = angle_nearest_range(data, deg_center - deg_arc, deg_center + deg_arc)
+    return val - deg_center
 
 
 def angle_distance(data: list, a: int, b: int) -> float:
@@ -305,13 +302,27 @@ class PidController(object):
 # flak end: pid_controller.py
 # flak: mayson_controller.py
 
+MC_NOP = 0x00
+MC_ZERO = 0x01
+
+MC_FWD = 0x10
+
+MC_TURN_LEFT = 0x20
+MC_TURN_RIGHT = 0x21
+
 
 class MaysonController(object):
     MODE_POSITION = 0
     MODE_HEADING = 1
 
     def __init__(self):
+        self.near_threshold = 0.25
+        self.expected_wall_distance = 0.12
+        self.grid_size = 0.3
+
         self.mode = MaysonController.MODE_POSITION
+        self.queue = []
+        self.current_inst = 0
         self.angular_stab_checker = StabChecker(10, 0.05)
 
         self.zero_origin: Vector = Vector(0, 0)
@@ -320,10 +331,11 @@ class MaysonController(object):
         self.actual_position: Vector = Vector(0, 0)
         self.actual_heading: float = 0
 
-        self.target_position: Vector = Vector(0, 0)
+        self.inst_start_pos = Vector(0, 0)
+        self.inst_start_angle = 0
 
-        self.delta_distance: Vector
-        self.delta_angle: float
+        self.delta_distance: float = 0
+        self.delta_angle: float = 0
 
     def set_zero(self, zero_origin: Vector, zero_angle: float):
         self.zero_origin = zero_origin
@@ -334,26 +346,60 @@ class MaysonController(object):
         morm_pos.rotate(-self.zero_angle)
         return morm_pos
 
-    def update_current_position(self, ros_pos: Vector, heading: float):
+    def tick(self, ros_pos: Vector, heading: float, distance_data: list):
         self.actual_position = self.normalize_position(ros_pos)
         self.actual_heading = heading - self.zero_angle
 
-    def calculate_target_distance(self):
-        return self.actual_position.euclidean_distance(self.target_position)
+        if self.current_inst == MC_NOP:
+            if len(self.queue) == 0:
+                raise Exception("no further instruction")
+            self.current_inst = self.queue[0]
+            self.queue = self.queue[1:]
+            self.inst_start_pos = self.actual_position.clone()
+            self.inst_start_angle = self.actual_heading
+            print("next inst ", self.current_inst)
 
-    def tick(self):
-        self.delta_distance = self.actual_position.euclidean_distance(self.target_position)
-        self.target_angle = self.actual_position.angle_toward(self.target_position)
-        self.delta_angle = angle_calculate_delta(self.actual_heading, self.target_angle)
+        inst_delta_dist = self.inst_start_pos.euclidean_distance(self.actual_position)
+        inst_delta_angle = angle_calculate_delta(self.inst_start_angle, self.actual_heading)
+        print("inst delta", inst_delta_dist, inst_delta_angle)
 
-        if not self.angular_stab_checker.tick(self.delta_angle) or self.mode == MaysonController.MODE_HEADING:
+        distance_left = angle_distance(distance_data, 90 - 15, 90 + 15)
+
+        if self.current_inst == MC_ZERO:
+            self.set_zero(ros_pos, heading)
+            self.current_inst = MC_NOP
+
+        elif self.current_inst == MC_FWD:
+            if inst_delta_dist >= self.grid_size:
+                self.delta_distance = 0
+                self.delta_angle = 0
+                self.current_inst = MC_NOP
+            else:
+                self.delta_distance = self.grid_size - inst_delta_dist
+                self.delta_angle = 0
+
+                if distance_left < self.near_threshold:
+                    nearest_left = angle_nearest_range_relative(distance_data, 80, 15)
+                    distance_angle_offset = (distance_left - self.expected_wall_distance) * 0.7
+                    self.delta_angle = (nearest_left + distance_angle_offset) / 180 * math.pi
+                    print("fwd turn", nearest_left, distance_left)
+
+
+
+        elif self.current_inst == MC_TURN_LEFT:
             self.delta_distance = 0.0
+            self.delta_angle = (math.pi / 2) - inst_delta_angle
+            if self.angular_stab_checker.tick(self.delta_angle):
+                self.current_inst = MC_NOP
 
-    def set_target(self, target):
-        self.target_position = target
+        elif self.current_inst == MC_TURN_RIGHT:
+            self.delta_distance = 0.0
+            self.delta_angle = -(math.pi / 2) - inst_delta_angle
+            if self.angular_stab_checker.tick(self.delta_angle):
+                self.current_inst = MC_NOP
 
-    def check_finished(self):
-        pass
+    def enqueue(self, instruction: int):
+        self.queue.append(instruction)
 
 
 # flak end: mayson_controller.py
@@ -411,95 +457,6 @@ class ArrayAverage(object):
                 max_index = i
         return max_index
 # flak end: array_average.py
-# flak: griddle.py
-
-GRIDDLE_NOP = 0x00
-GRIDDLE_ALIGN = 0x01
-
-GRIDDLE_L = 0x10
-GRIDDLE_R = 0x13
-
-GRIDDLE_F1 = 0x20
-GRIDDLE_F2 = 0x21
-GRIDDLE_F3 = 0x22
-GRIDDLE_F4 = 0x23
-GRIDDLE_F5 = 0x24
-
-
-class Griddle(object):
-    def __init__(self, controller: MaysonController):
-        self.controller: MaysonController = controller
-        self.position: Vector = Vector(0, 0)
-        self.heading: int = 0
-        self.near_threshold = 0.2
-        self.expected_wall_distance = 0.15
-        self.grid_size = 0.3
-
-        self.current_instruction: int = 0
-        self.queue: list = []
-
-    def enqueue(self, inst: int):
-        self.queue.append(inst)
-
-    def tick(self, ros_pos: Vector, ros_angle: float, sensor: list):
-        if self.current_instruction == GRIDDLE_NOP or (self.controller.calculate_target_distance() < 0.01):
-            self.current_instruction = self.queue.pop()
-            self.align(ros_pos, ros_angle, sensor)
-
-            if self.current_instruction == GRIDDLE_F1:
-                self.controller.set_target(Vector(self.grid_size, 0))
-
-    def align(self, ros_pos: Vector, ros_angle: float, sensor: list):
-        distance_front = angle_distance(sensor, 0 - 30, 0 + 30)
-        distance_left = angle_distance(sensor, 90 - 30, 90 + 30)
-        distance_right = angle_distance(sensor, 270 - 30, 270 + 30)
-
-        print("lfr", distance_left, distance_front, distance_right)
-
-        angle_offset = 0.0
-        angle_offset_counter = 0
-
-        pos_offset = Vector(0.0, 0.0)
-
-        near_front = distance_front < self.near_threshold
-        near_left = distance_left < self.near_threshold
-        near_right = distance_right < self.near_threshold
-
-        if not near_front and not near_left and not near_right:
-            self.controller.set_zero(ros_pos, ros_angle)
-            return
-
-        if near_front:
-            angle_offset += angle_correction_min(sensor, 0, 30) / 180 * math.pi
-            pos_offset.x += distance_front - self.expected_wall_distance
-            angle_offset_counter += 1
-            print("align front")
-        if near_left:
-            angle_offset += angle_correction_min(sensor, 90, 30) / 180 * math.pi
-            pos_offset.y += distance_front - self.expected_wall_distance
-            angle_offset_counter += 1
-            print("align left")
-        if near_right:
-            angle_offset += angle_correction_min(sensor, 270, 30) / 180 * math.pi
-            pos_offset.y -= distance_front - self.expected_wall_distance
-            angle_offset_counter += 1
-            print("align right")
-
-        if near_left and near_right:
-            pos_offset.y /= 2.0  # this will average out in the case if both side has a wall
-        if angle_offset_counter > 0:
-            angle_offset /= angle_offset_counter
-
-        print("align linear offset", pos_offset)
-        print("align angular offset", angle_offset)
-        pos_offset.rotate(ros_angle)
-
-        self.controller.set_zero(ros_pos + pos_offset, ros_angle + angle_offset)
-
-        print("align completed")
-
-
-# flak end: griddle.py
 # flak: stab_checker.py
 class StabChecker(object):
     def __init__(self, size: int, threshold: float):

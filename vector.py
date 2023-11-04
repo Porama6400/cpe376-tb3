@@ -40,6 +40,9 @@ class Vector(object):
         self.x = x_new
         self.y = y_new
 
+    def clone(self):
+        return Vector(self.x, self.y)
+
 
 # flak noexport
 

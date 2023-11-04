@@ -36,6 +36,11 @@ def angle_nearest_range(data: list, deg_a: int, deg_b: int) -> int:
     return min_index
 
 
+def angle_nearest_range_relative(data: list, deg_center: int, deg_arc: int) -> int:
+    val = angle_nearest_range(data, deg_center - deg_arc, deg_center + deg_arc)
+    return val - deg_center
+
+
 def angle_distance(data: list, a: int, b: int) -> float:
     last = 1000000
     r = range(a, b)

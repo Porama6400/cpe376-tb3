@@ -1,12 +1,19 @@
 import math
 import unittest
 
-from angle_util import angle_calculate_delta
+from angle_util import *
 from vector import Vector
 from stab_checker import StabChecker
 
-
 # flak export
+
+MC_NOP = 0x00
+MC_ZERO = 0x01
+
+MC_FWD = 0x10
+
+MC_TURN_LEFT = 0x20
+MC_TURN_RIGHT = 0x21
 
 
 class MaysonController(object):
@@ -14,7 +21,13 @@ class MaysonController(object):
     MODE_HEADING = 1
 
     def __init__(self):
+        self.near_threshold = 0.25
+        self.expected_wall_distance = 0.12
+        self.grid_size = 0.3
+
         self.mode = MaysonController.MODE_POSITION
+        self.queue = []
+        self.current_inst = 0
         self.angular_stab_checker = StabChecker(10, 0.05)
 
         self.zero_origin: Vector = Vector(0, 0)
@@ -23,10 +36,11 @@ class MaysonController(object):
         self.actual_position: Vector = Vector(0, 0)
         self.actual_heading: float = 0
 
-        self.target_position: Vector = Vector(0, 0)
+        self.inst_start_pos = Vector(0, 0)
+        self.inst_start_angle = 0
 
-        self.delta_distance: Vector
-        self.delta_angle: float
+        self.delta_distance: float = 0
+        self.delta_angle: float = 0
 
     def set_zero(self, zero_origin: Vector, zero_angle: float):
         self.zero_origin = zero_origin
@@ -37,26 +51,60 @@ class MaysonController(object):
         morm_pos.rotate(-self.zero_angle)
         return morm_pos
 
-    def update_current_position(self, ros_pos: Vector, heading: float):
+    def tick(self, ros_pos: Vector, heading: float, distance_data: list):
         self.actual_position = self.normalize_position(ros_pos)
         self.actual_heading = heading - self.zero_angle
 
-    def calculate_target_distance(self):
-        return self.actual_position.euclidean_distance(self.target_position)
+        if self.current_inst == MC_NOP:
+            if len(self.queue) == 0:
+                raise Exception("no further instruction")
+            self.current_inst = self.queue[0]
+            self.queue = self.queue[1:]
+            self.inst_start_pos = self.actual_position.clone()
+            self.inst_start_angle = self.actual_heading
+            print("next inst ", self.current_inst)
 
-    def tick(self):
-        self.delta_distance = self.actual_position.euclidean_distance(self.target_position)
-        self.target_angle = self.actual_position.angle_toward(self.target_position)
-        self.delta_angle = angle_calculate_delta(self.actual_heading, self.target_angle)
+        inst_delta_dist = self.inst_start_pos.euclidean_distance(self.actual_position)
+        inst_delta_angle = angle_calculate_delta(self.inst_start_angle, self.actual_heading)
+        print("inst delta", inst_delta_dist, inst_delta_angle)
 
-        if not self.angular_stab_checker.tick(self.delta_angle) or self.mode == MaysonController.MODE_HEADING:
+        distance_left = angle_distance(distance_data, 90 - 15, 90 + 15)
+
+        if self.current_inst == MC_ZERO:
+            self.set_zero(ros_pos, heading)
+            self.current_inst = MC_NOP
+
+        elif self.current_inst == MC_FWD:
+            if inst_delta_dist >= self.grid_size:
+                self.delta_distance = 0
+                self.delta_angle = 0
+                self.current_inst = MC_NOP
+            else:
+                self.delta_distance = self.grid_size - inst_delta_dist
+                self.delta_angle = 0
+
+                if distance_left < self.near_threshold:
+                    nearest_left = angle_nearest_range_relative(distance_data, 80, 15)
+                    distance_angle_offset = (distance_left - self.expected_wall_distance) * 0.7
+                    self.delta_angle = (nearest_left + distance_angle_offset) / 180 * math.pi
+                    print("fwd turn", nearest_left, distance_left)
+
+
+
+        elif self.current_inst == MC_TURN_LEFT:
             self.delta_distance = 0.0
+            self.delta_angle = (math.pi / 2) - inst_delta_angle
+            if self.angular_stab_checker.tick(self.delta_angle):
+                self.current_inst = MC_NOP
 
-    def set_target(self, target):
-        self.target_position = target
+        elif self.current_inst == MC_TURN_RIGHT:
+            self.delta_distance = 0.0
+            self.delta_angle = -(math.pi / 2) - inst_delta_angle
+            if self.angular_stab_checker.tick(self.delta_angle):
+                self.current_inst = MC_NOP
 
-    def check_finished(self):
-        pass
+    def enqueue(self, instruction: int):
+        self.queue.append(instruction)
 
 
 # flak noexport
