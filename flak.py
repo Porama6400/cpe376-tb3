@@ -11,11 +11,10 @@ def print_flak(file_name: str):
     for flak_line in flak_lines:
         if flak_line.startswith("# flak export"):
             flag_exporting = True
-        elif flak_line.startswith("# flak end"):
+        elif flak_line.startswith("# flak noexport"):
             flag_exporting = False
         elif flag_exporting:
             print(flak_line.rstrip())
-
     print("# flak end: " + file_name)
 
 
@@ -34,5 +33,5 @@ for line in lines:
         flag_omitted = True
     elif line.startswith("# flak unomit"):
         flag_omitted = False
-    else:
+    elif not flag_omitted:
         print(line.rstrip())

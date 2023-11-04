@@ -41,7 +41,7 @@ class Vector(object):
         self.y = y_new
 
 
-# flak end
+# flak noexport
 
 class TestPosition(TestCase):
     def test_add(self):
