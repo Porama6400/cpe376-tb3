@@ -64,6 +64,7 @@ class WaypointController(object):
         else:
             self.delta_distance_ndir = 0
 
+
 # flak noexport
 class TestWaypointController(TestCase):
     def test_calibration(self):

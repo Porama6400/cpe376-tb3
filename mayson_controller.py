@@ -14,6 +14,7 @@ MC_FWD = 0x10
 
 MC_TURN_LEFT = 0x20
 MC_TURN_RIGHT = 0x21
+MC_TURN_U = 0x22
 
 
 class MaysonController(object):
@@ -28,7 +29,8 @@ class MaysonController(object):
         self.mode = MaysonController.MODE_POSITION
         self.queue = []
         self.current_inst = 0
-        self.angular_stab_checker = StabChecker(10, 0.05)
+        self.current_inst_stack = 0
+        self.angular_stab_checker = StabChecker(10, 0.1)
 
         self.zero_origin: Vector = Vector(0, 0)
         self.zero_angle: float = 0.0
@@ -59,6 +61,7 @@ class MaysonController(object):
             if len(self.queue) == 0:
                 raise Exception("no further instruction")
             self.current_inst = self.queue[0]
+            self.current_inst_stack = 1
             self.queue = self.queue[1:]
             self.inst_start_pos = self.actual_position.clone()
             self.inst_start_angle = self.actual_heading
@@ -68,19 +71,24 @@ class MaysonController(object):
         inst_delta_angle = angle_calculate_delta(self.inst_start_angle, self.actual_heading)
         print("inst delta", inst_delta_dist, inst_delta_angle)
 
-        distance_left = angle_distance(distance_data, 90 - 15, 90 + 15)
+        distance_left = angle_distance(distance_data, 90 - 5, 90 + 5)
 
         if self.current_inst == MC_ZERO:
             self.set_zero(ros_pos, heading)
             self.current_inst = MC_NOP
 
         elif self.current_inst == MC_FWD:
-            if inst_delta_dist >= self.grid_size:
+            if len(self.queue) > 0 and self.queue[0] == MC_FWD:
+                self.queue = self.queue[1:]
+                self.current_inst_stack += 1
+
+            target_distance = self.grid_size * self.current_inst_stack
+            if inst_delta_dist >= target_distance:
                 self.delta_distance = 0
                 self.delta_angle = 0
                 self.current_inst = MC_NOP
             else:
-                self.delta_distance = self.grid_size - inst_delta_dist
+                self.delta_distance = target_distance - inst_delta_dist
                 self.delta_angle = 0
 
                 if distance_left < self.near_threshold:
@@ -93,13 +101,19 @@ class MaysonController(object):
 
         elif self.current_inst == MC_TURN_LEFT:
             self.delta_distance = 0.0
-            self.delta_angle = (math.pi / 2) - inst_delta_angle
+            self.delta_angle = angle_calculate_delta(inst_delta_angle, math.pi / 2)
             if self.angular_stab_checker.tick(self.delta_angle):
                 self.current_inst = MC_NOP
 
         elif self.current_inst == MC_TURN_RIGHT:
             self.delta_distance = 0.0
-            self.delta_angle = -(math.pi / 2) - inst_delta_angle
+            self.delta_angle = angle_calculate_delta(inst_delta_angle, -math.pi / 2)
+            if self.angular_stab_checker.tick(self.delta_angle):
+                self.current_inst = MC_NOP
+
+        elif self.current_inst == MC_TURN_U:
+            self.delta_distance = 0.0
+            self.delta_angle = angle_calculate_delta(inst_delta_angle, math.pi)
             if self.angular_stab_checker.tick(self.delta_angle):
                 self.current_inst = MC_NOP
 

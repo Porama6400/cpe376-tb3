@@ -1,4 +1,3 @@
-# Authors : Nopphakorn Subs. Niwatchai Wang. Supasate Wor. Narith Tha. Tawan Thaep. Napatharak Muan.
 from dis import dis
 from socket import TIPC_SUBSCR_TIMEOUT
 import rclpy
@@ -18,6 +17,8 @@ from array_average import ArrayAverage
 from pid_controller import PidController
 from mayson_controller import *
 from vector import Vector
+from planner import *
+from planner_superposition import *
 
 
 # flak unomit
@@ -44,24 +45,43 @@ class Turtlebot3Controller(Node):
         self.timer = self.create_timer(0.1, self.timerCallback)
 
         self.pid_linear = PidController()
-        self.pid_linear.output_cap = 0.1
+        self.pid_linear.output_cap = 0.15
         self.pid_linear.proportional_gain = 0.8
         self.pid_linear.integral_gain = 0.5
         self.pid_linear.integral_cap = 0.03
         self.pid_linear.integral_time = 8
 
         self.pid_angular = PidController()
-        self.pid_angular.proportional_gain = 1
-        self.pid_angular.integral_gain = 0.5
+        self.pid_angular.proportional_gain = 1.5
+        self.pid_angular.integral_gain = 0.2
         self.pid_angular.integral_time = 8
-        self.pid_linear.integral_cap = 0.1
+        self.pid_linear.integral_cap = 0.01
         self.pid_angular.output_cap = 2
 
         self.controller = MaysonController()
-        self.controller.enqueue(MC_ZERO)
-        self.controller.enqueue(MC_FWD)
-        self.controller.enqueue(MC_FWD)
         self.tick_counter = 0
+
+        self.world = PlannerWorld(5, 3)
+        self.world.set_wall(0, 0, SIDE_RIGHT, False)
+        self.world.set_wall(1, 0, SIDE_RIGHT, False)
+        self.world.set_wall(2, 0, SIDE_RIGHT, False)
+        self.world.set_wall(2, 0, SIDE_BOTTOM, False)
+        self.world.set_wall(3, 0, SIDE_RIGHT, False)
+        self.world.set_wall(4, 0, SIDE_BOTTOM, False)
+
+        self.world.set_wall(0, 1, SIDE_RIGHT, False)
+        self.world.set_wall(0, 1, SIDE_BOTTOM, False)
+        self.world.set_wall(2, 1, SIDE_BOTTOM, False)
+
+        self.world.set_wall(0, 2, SIDE_RIGHT, False)
+        self.world.set_wall(1, 2, SIDE_RIGHT, False)
+        self.world.set_wall(2, 2, SIDE_RIGHT, False)
+        self.world.set_wall(3, 2, SIDE_RIGHT, False)
+
+        self.start_position = PlannerPosition(4, 0, SIDE_LEFT)
+        plan = self.start_position.generate(self.world, 1, 1)
+        for instruction in plan:
+            self.controller.enqueue(instruction)
 
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
@@ -137,3 +157,5 @@ if __name__ == '__main__':
 # flak emplacement mayson_controller
 # flak emplacement array_average
 # flak emplacement stab_checker
+# flak emplacement planner
+# flak emplacement planner_position

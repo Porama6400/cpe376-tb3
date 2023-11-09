@@ -117,6 +117,13 @@ class PlannerWorld(object):
         return min_side
 
 
+def planner_delta_angle(fr: int, to: int) -> int:
+    delta = (to - fr) % 4
+    if delta == 3:
+        delta = -1
+    return delta
+
+
 # flak noexport
 
 world = PlannerWorld(4, 3)
