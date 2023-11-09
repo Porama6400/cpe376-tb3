@@ -79,8 +79,8 @@ class Turtlebot3Controller(Node):
         dist_left = angle_distance(self.valueLaserRanges, 75, 105)
 
         print("detect", dist_right, dist_front)
-        speed_linear = self.pid_linear.tick(dist_front - 0.3)
-        speed_angular = self.pid_angular.tick((-dist_right + 0.2) * 5)
+        speed_linear = self.pid_linear.validate(dist_front - 0.3)
+        speed_angular = self.pid_angular.validate((-dist_right + 0.2) * 5)
         print("speed", speed_linear, speed_angular)
         self.publishVelocityCommand(float(speed_linear), float(speed_angular))
 

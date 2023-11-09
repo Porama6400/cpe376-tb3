@@ -78,7 +78,7 @@ class Turtlebot3Controller(Node):
 
         print("position", self.valuePosition)
         print("range", laser_range)
-        speed_linear = self.pid_linear.tick(laser_range - 0.3)
+        speed_linear = self.pid_linear.validate(laser_range - 0.3)
         if speed_linear < 0:
             speed_linear = 0.0
 

@@ -77,7 +77,7 @@ class Turtlebot3Controller(Node):
                 angle = i / 180.0 * math.pi
 
         print("range", min_dist, angle)
-        speed_angular = self.pid_angular.tick(angle_calculate_delta(0, angle))
+        speed_angular = self.pid_angular.validate(angle_calculate_delta(0, angle))
         print("speed", speed_angular)
         self.publishVelocityCommand(0.0, float(speed_angular))
 

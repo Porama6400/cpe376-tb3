@@ -94,7 +94,7 @@ class Turtlebot3Controller(Node):
         nearest_distance_left = self.valueLaserRanges[nearest_index_left]
         nearest_distance_right = self.valueLaserRanges[nearest_index_left + 180]
 
-        delta_offset = self.pid_distance.tick(nearest_distance_left - nearest_distance_right)
+        delta_offset = self.pid_distance.validate(nearest_distance_left - nearest_distance_right)
         print("nearest", nearest_delta_left)
         print("nearest_dist", self.valueLaserRanges[nearest_index_left])
         print("delta_offset", delta_offset)

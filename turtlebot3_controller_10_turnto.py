@@ -68,7 +68,7 @@ class Turtlebot3Controller(Node):
         print("tick")
         print("yaw", self.valueRotation)
 
-        speed_angular = self.pid_angular.tick(angle_calculate_delta(self.valueRotation, 0))
+        speed_angular = self.pid_angular.validate(angle_calculate_delta(self.valueRotation, 0))
         print("speed", speed_angular)
         self.publishVelocityCommand(0.0, float(speed_angular))
 

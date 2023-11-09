@@ -103,7 +103,7 @@ class Turtlebot3Controller(Node):
         vec_pos = Vector(self.valuePosition.x, self.valuePosition.y)
         print("pos", vec_pos, self.valueRotation)
 
-        self.waypoint_controller.tick(vec_pos, self.valueRotation)
+        self.waypoint_controller.validate(vec_pos, self.valueRotation)
 
         delta_distance = self.waypoint_controller.delta_distance_ndir
         delta_angle = self.waypoint_controller.delta_angle
@@ -111,11 +111,11 @@ class Turtlebot3Controller(Node):
 
         if self.state == 0:
             delta_distance = 0
-            if self.stab_angular.tick(self.waypoint_controller.delta_angle):
+            if self.stab_angular.validate(self.waypoint_controller.delta_angle):
                 self.state = 1
         elif self.state == 1:
             delta_angle = 0
-            if self.stab_linear.tick(self.waypoint_controller.delta_distance_ndir):
+            if self.stab_linear.validate(self.waypoint_controller.delta_distance_ndir):
                 self.waypoint_controller.next()
                 print("next")
                 self.state = 0
@@ -129,8 +129,8 @@ class Turtlebot3Controller(Node):
 
         print("desired", self.waypoint_controller.desired_position)
 
-        speed_linear = self.pid_linear.tick(delta_distance)
-        speed_angular = self.pid_angular.tick(delta_angle)
+        speed_linear = self.pid_linear.validate(delta_distance)
+        speed_angular = self.pid_angular.validate(delta_angle)
         print("speed", speed_linear, speed_angular)
         self.publishVelocityCommand(float(speed_linear), float(speed_angular))
 
