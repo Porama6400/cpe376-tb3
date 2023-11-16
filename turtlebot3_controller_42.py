@@ -63,6 +63,31 @@ class Turtlebot3Controller(Node):
         self.near_threshold = 0.23
         self.laser_distance_available = False
 
+        self.collapsed = False
+        self.world = PlannerWorld(5, 3)
+        self.world.set_wall(0, 0, SIDE_RIGHT, False)
+        self.world.set_wall(0, 0, SIDE_BOTTOM, False)
+        self.world.set_wall(1, 0, SIDE_RIGHT, False)
+        self.world.set_wall(2, 0, SIDE_RIGHT, False)
+        self.world.set_wall(2, 0, SIDE_BOTTOM, False)
+        self.world.set_wall(3, 0, SIDE_RIGHT, False)
+        self.world.set_wall(3, 0, SIDE_BOTTOM, False)
+        self.world.set_wall(4, 0, SIDE_BOTTOM, False)
+
+        self.world.set_wall(0, 1, SIDE_RIGHT, False)
+        self.world.set_wall(0, 1, SIDE_BOTTOM, False)
+        self.world.set_wall(1, 1, SIDE_RIGHT, False)
+        self.world.set_wall(1, 1, SIDE_BOTTOM, False)
+        self.world.set_wall(2, 1, SIDE_BOTTOM, False)
+        self.world.set_wall(4, 1, SIDE_BOTTOM, False)
+
+        self.world.set_wall(0, 2, SIDE_RIGHT, False)
+        self.world.set_wall(2, 2, SIDE_RIGHT, False)
+        self.world.set_wall(3, 2, SIDE_RIGHT, False)
+
+        self.planner = PlannerSuperPosition(self.world)
+        self.planner.populate_all()
+
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
         msg.linear.x = linearVelocity
@@ -96,73 +121,47 @@ class Turtlebot3Controller(Node):
         self.tick_counter += 1
         ros_pos = Vector(self.valuePosition.x, self.valuePosition.y)
         distance_left = angle_distance(self.valueLaserRanges, 90 - 5, 90 + 5)
-        distance_front = angle_distance(self.valueLaserRanges, 0 - 5, 0 + 5)
-        distance_back = angle_distance(self.valueLaserRanges, 180 - 5, 180 + 5)
+        distance_top = angle_distance(self.valueLaserRanges, 0 - 5, 0 + 5)
         distance_right = angle_distance(self.valueLaserRanges, 270 - 5, 270 + 5)
         near_left = distance_left < self.near_threshold
-        near_front = distance_front < self.near_threshold
-        near_back = distance_back < self.near_threshold
+        near_top = distance_top < self.near_threshold
         near_right = distance_right < self.near_threshold
 
-        try:
+        if not self.collapsed:
+            try:
+                self.controller.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
+            except Exception as ex:
+                print(ex)
+                print("sensor", distance_left, distance_top, distance_right)
+                print("near", near_left, near_top, near_right)
+                self.planner.validate(near_left, near_top, near_right)
+
+                if self.planner.is_collapsed():
+                    self.collapsed = True
+
+                    position: PlannerPosition = self.planner.get_certain_position()
+                    print("collapsed!")
+                    print("certain position known:", position.x, position.y)
+                    print("start position known:", position.start_x, position.start_y, "@", position.start_direction)
+                    plan = position.generate(self.world, 3, 1)
+                    for instruction in plan:
+                        self.controller.enqueue(instruction)
+
+                elif not near_top:
+                    self.controller.enqueue(MC_FWD)
+                    self.planner.step()
+                elif not near_left:
+                    self.controller.enqueue(MC_TURN_LEFT)
+                    self.planner.turn(1)
+                elif not near_right:
+                    self.controller.enqueue(MC_TURN_RIGHT)
+                    self.planner.turn(-1)
+                else:
+                    self.controller.enqueue(MC_TURN_U)
+                    self.planner.turn(2)
+
+        else:
             self.controller.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
-        except Exception as ex:
-            print(ex)
-            print("sensor", distance_left, distance_front, distance_back, distance_right)
-            print("near", near_left, near_front, near_back, near_right)
-
-            if near_left and near_front and near_right and not near_back:
-                # except back
-                raise Exception("done")
-
-            elif near_left and not near_front and near_right:
-                # left and right
-                self.controller.enqueue(MC_FWD)
-
-            elif near_left and not near_front and not near_right and near_back:
-                # left and back
-                self.controller.enqueue(MC_FWD)
-
-            elif not near_left and not near_front and near_right and near_back:
-                # right and back
-                self.controller.enqueue(MC_FWD)
-
-            elif near_left and near_front and not near_right:
-                # left and front
-                self.controller.enqueue(MC_TURN_RIGHT)
-                self.controller.enqueue(MC_TURN_RIGHT)
-
-            elif not near_left and near_front and near_right:
-                # right and front
-                self.controller.enqueue(MC_TURN_LEFT)
-
-            elif not near_left and not near_front and not near_right and near_back:
-                # back only
-                self.controller.enqueue(MC_FWD)
-
-            elif near_left and not near_front and not near_right and not near_back:
-                # left only
-                self.controller.enqueue(MC_FWD)
-
-            elif not near_left and near_front and not near_right and not near_back:
-                # front only
-                self.controller.enqueue(MC_TURN_RIGHT)
-
-            elif not near_left and not near_front and near_right and not near_back:
-                # right only
-                self.controller.enqueue(MC_TURN_LEFT)
-
-            elif near_back and not near_front:
-                self.controller.enqueue(MC_FWD)
-
-            elif not near_front:
-                self.controller.enqueue(MC_FWD)
-
-            elif not near_left:
-                self.controller.enqueue(MC_TURN_LEFT)
-
-            else:
-                self.controller.enqueue(MC_TURN_RIGHT)
 
         speed = self.pid_linear.tick(self.controller.delta_distance)
         angle = self.pid_angular.tick(self.controller.delta_angle)

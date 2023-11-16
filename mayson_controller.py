@@ -24,7 +24,7 @@ class MaysonController(object):
     def __init__(self):
         self.near_threshold = 0.25
         self.expected_wall_distance = 0.12
-        self.grid_size = 0.3
+        self.grid_size = 0.28
 
         self.mode = MaysonController.MODE_POSITION
         self.queue = []
@@ -72,6 +72,7 @@ class MaysonController(object):
         print("inst delta", inst_delta_dist, inst_delta_angle)
 
         distance_left = angle_distance(distance_data, 90 - 5, 90 + 5)
+        distance_right = angle_distance(distance_data, 270 - 5, 270 + 5)
 
         if self.current_inst == MC_ZERO:
             self.set_zero(ros_pos, heading)
@@ -92,10 +93,16 @@ class MaysonController(object):
                 self.delta_angle = 0
 
                 if distance_left < self.near_threshold:
-                    nearest_left = angle_nearest_range_relative(distance_data, 80, 15)
+                    nearest_left = angle_nearest_range_relative(distance_data, 77, 15)
                     distance_angle_offset = (distance_left - self.expected_wall_distance) * 0.7
                     self.delta_angle = (nearest_left + distance_angle_offset) / 180 * math.pi
                     print("fwd turn", nearest_left, distance_left)
+
+                elif distance_right < self.near_threshold:
+                    nearest_right = angle_nearest_range_relative(distance_data, 257, 15)
+                    distance_angle_offset = (distance_left - self.expected_wall_distance) * 0.7
+                    self.delta_angle = (nearest_right + distance_angle_offset) / 180 * math.pi
+                    print("fwd turn", nearest_right, distance_left)
 
 
 
