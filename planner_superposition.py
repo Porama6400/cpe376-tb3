@@ -61,7 +61,7 @@ class PlannerSuperPosition(object):
     def is_collapsed(self):
         return self.count_possible_positions() <= 1
 
-    def get_certain_position(self) -> Any | None:
+    def get_certain_position(self):
         count = self.count_possible_positions()
         if count == 0:
             raise Exception("unable to solve for position: no possible valid position")

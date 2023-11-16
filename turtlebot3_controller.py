@@ -49,28 +49,33 @@ class Turtlebot3Controller(Node):
 
         self.controller = MaysonController()
         self.tick_counter = 0
+        self.near_threshold = 0.2
+        self.laser_distance_available = False
 
+        self.collapsed = False
         self.world = PlannerWorld(5, 3)
         self.world.set_wall(0, 0, SIDE_RIGHT, False)
+        self.world.set_wall(0, 0, SIDE_BOTTOM, False)
         self.world.set_wall(1, 0, SIDE_RIGHT, False)
         self.world.set_wall(2, 0, SIDE_RIGHT, False)
         self.world.set_wall(2, 0, SIDE_BOTTOM, False)
         self.world.set_wall(3, 0, SIDE_RIGHT, False)
+        self.world.set_wall(3, 0, SIDE_BOTTOM, False)
         self.world.set_wall(4, 0, SIDE_BOTTOM, False)
 
         self.world.set_wall(0, 1, SIDE_RIGHT, False)
         self.world.set_wall(0, 1, SIDE_BOTTOM, False)
+        self.world.set_wall(1, 1, SIDE_RIGHT, False)
+        self.world.set_wall(1, 1, SIDE_BOTTOM, False)
         self.world.set_wall(2, 1, SIDE_BOTTOM, False)
+        self.world.set_wall(4, 1, SIDE_BOTTOM, False)
 
         self.world.set_wall(0, 2, SIDE_RIGHT, False)
-        self.world.set_wall(1, 2, SIDE_RIGHT, False)
         self.world.set_wall(2, 2, SIDE_RIGHT, False)
         self.world.set_wall(3, 2, SIDE_RIGHT, False)
 
-        self.start_position = PlannerPosition(4, 0, SIDE_LEFT)
-        plan = self.start_position.generate(self.world, 1, 1)
-        for instruction in plan:
-            self.controller.enqueue(instruction)
+        self.planner = PlannerSuperPosition(self.world)
+        self.planner.populate_all()
 
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
         msg = Twist()
@@ -80,6 +85,7 @@ class Turtlebot3Controller(Node):
         # self.get_logger().info('Publishing cmd_vel: "%s", "%s"' % linearVelocity, angularVelocity)
 
     def scanCallback(self, msg):
+        self.laser_distance_available = True
         self.valueLaserRanges = list(msg.ranges)
 
     def batteryStateCallback(self, msg):
@@ -98,9 +104,51 @@ class Turtlebot3Controller(Node):
         self.valueRotation = math.atan2(siny_cosp, cosy_cosp)
 
     def timerCallback(self):
+        if not self.laser_distance_available:
+            return
+
         self.tick_counter += 1
         ros_pos = Vector(self.valuePosition.x, self.valuePosition.y)
-        self.controller.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
+        distance_left = angle_distance(self.valueLaserRanges, 90 - 5, 90 + 5)
+        distance_top = angle_distance(self.valueLaserRanges, 0 - 5, 0 + 5)
+        distance_right = angle_distance(self.valueLaserRanges, 270 - 5, 270 + 5)
+        near_left = distance_left < self.near_threshold
+        near_top = distance_top < self.near_threshold
+        near_right = distance_right < self.near_threshold
+
+        if not self.collapsed:
+            try:
+                self.controller.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
+            except Exception as ex:
+                print(ex)
+                print("sensor", distance_left, distance_top, distance_right)
+                print("near", near_left, near_top, near_right)
+                self.planner.validate(near_left, near_top, near_right)
+                if not near_top:
+                    self.controller.enqueue(MC_FWD)
+                    self.planner.step()
+                elif not near_left:
+                    self.controller.enqueue(MC_TURN_LEFT)
+                    self.planner.turn(1)
+                elif not near_right:
+                    self.controller.enqueue(MC_TURN_RIGHT)
+                    self.planner.turn(-1)
+                else:
+                    self.controller.enqueue(MC_TURN_U)
+                    self.planner.turn(2)
+
+                if self.planner.is_collapsed():
+                    self.collapsed = True
+
+                    position: PlannerPosition = self.planner.get_certain_position()
+                    print("certain position known:", position.x, position.y)
+                    plan = position.generate(self.world, 3, 1)
+                    for instruction in plan:
+                        self.controller.enqueue(instruction)
+
+        else:
+            self.controller.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
+
         speed = self.pid_linear.tick(self.controller.delta_distance)
         angle = self.pid_angular.tick(self.controller.delta_angle)
 
@@ -682,11 +730,6 @@ class PlannerPosition(object):
         front_wall = world.get_wall(self.x, self.y, front_side_id)
         left_wall = world.get_wall(self.x, self.y, left_side_id)
         right_wall = world.get_wall(self.x, self.y, right_side_id)
-        print("val", )
-        print("pos", self.x, self.y, "@", self.direction)
-        print("sid", front_side_id, left_side_id, right_side_id)
-        print("expt", front_wall, left_wall, right_wall)
-        print("found", front, left, right)
 
         if front_wall != front or left_wall != left or right_wall != right:
             self.drop()
@@ -726,3 +769,72 @@ class PlannerPosition(object):
             inst_queue.append(MC_FWD)
         return inst_queue
 # flak end: planner_position.py
+# flak: planner_superposition.py
+
+class PlannerSuperPosition(object):
+    def __init__(self, world: PlannerWorld):
+        self.possible_positions: list = []
+        self.world = world
+
+    def add(self, pos: PlannerPosition):
+        self.possible_positions.append(pos)
+
+    def step(self):
+        for position in self.possible_positions:
+            planner_position: PlannerPosition = position
+            planner_position.step(self.world)
+        self.prune()
+
+    def turn(self, delta: int):
+        for position in self.possible_positions:
+            planner_position: PlannerPosition = position
+            planner_position.turn(delta)
+
+    def validate(self, left: bool, top: bool, right: bool):
+        for position in self.possible_positions:
+            planner_position: PlannerPosition = position
+            planner_position.validate(self.world, left, top, right)
+        self.prune()
+
+    def prune(self):
+        temp_list = []
+        for position in self.possible_positions:
+            planner_position: PlannerPosition = position
+            if planner_position.is_valid():
+                temp_list.append(planner_position)
+
+        self.possible_positions = temp_list
+
+    def populate_all(self):
+        for i in range(self.world.width):
+            for j in range(self.world.height):
+                self.add(PlannerPosition(i, j, SIDE_RIGHT))
+                self.add(PlannerPosition(i, j, SIDE_TOP))
+                self.add(PlannerPosition(i, j, SIDE_LEFT))
+                self.add(PlannerPosition(i, j, SIDE_BOTTOM))
+
+    def print(self):
+        print("All possible positions:", self.count_possible_positions())
+        for position in self.possible_positions:
+            planner_position: PlannerPosition = position
+            print(planner_position.x, planner_position.y, "@", planner_position.direction, "( start positon ",
+                  planner_position.start_x, planner_position.start_y, "@", planner_position.start_direction, ")")
+
+    def count_possible_positions(self) -> int:
+        return len(self.possible_positions)
+
+    def is_collapsed(self):
+        return self.count_possible_positions() <= 1
+
+    def get_certain_position(self):
+        count = self.count_possible_positions()
+        if count == 0:
+            raise Exception("unable to solve for position: no possible valid position")
+        elif count == 1:
+            return self.possible_positions[0]
+        else:
+            return None
+
+
+
+# flak end: planner_superposition.py

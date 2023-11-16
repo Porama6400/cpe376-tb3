@@ -49,11 +49,6 @@ class PlannerPosition(object):
         front_wall = world.get_wall(self.x, self.y, front_side_id)
         left_wall = world.get_wall(self.x, self.y, left_side_id)
         right_wall = world.get_wall(self.x, self.y, right_side_id)
-        print("val", )
-        print("pos", self.x, self.y, "@", self.direction)
-        print("sid", front_side_id, left_side_id, right_side_id)
-        print("expt", front_wall, left_wall, right_wall)
-        print("found", front, left, right)
 
         if front_wall != front or left_wall != left or right_wall != right:
             self.drop()

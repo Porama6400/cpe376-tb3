@@ -61,30 +61,31 @@ class Turtlebot3Controller(Node):
         self.controller = MaysonController()
         self.tick_counter = 0
         self.near_threshold = 0.2
+        self.laser_distance_available = False
 
         self.collapsed = False
         self.world = PlannerWorld(5, 3)
-        world.set_wall(0, 0, SIDE_RIGHT, False)
-        world.set_wall(0, 0, SIDE_BOTTOM, False)
-        world.set_wall(1, 0, SIDE_RIGHT, False)
-        world.set_wall(2, 0, SIDE_RIGHT, False)
-        world.set_wall(2, 0, SIDE_BOTTOM, False)
-        world.set_wall(3, 0, SIDE_RIGHT, False)
-        world.set_wall(3, 0, SIDE_BOTTOM, False)
-        world.set_wall(4, 0, SIDE_BOTTOM, False)
+        self.world.set_wall(0, 0, SIDE_RIGHT, False)
+        self.world.set_wall(0, 0, SIDE_BOTTOM, False)
+        self.world.set_wall(1, 0, SIDE_RIGHT, False)
+        self.world.set_wall(2, 0, SIDE_RIGHT, False)
+        self.world.set_wall(2, 0, SIDE_BOTTOM, False)
+        self.world.set_wall(3, 0, SIDE_RIGHT, False)
+        self.world.set_wall(3, 0, SIDE_BOTTOM, False)
+        self.world.set_wall(4, 0, SIDE_BOTTOM, False)
 
-        world.set_wall(0, 1, SIDE_RIGHT, False)
-        world.set_wall(0, 1, SIDE_BOTTOM, False)
-        world.set_wall(1, 1, SIDE_RIGHT, False)
-        world.set_wall(1, 1, SIDE_BOTTOM, False)
-        world.set_wall(2, 1, SIDE_BOTTOM, False)
-        world.set_wall(4, 1, SIDE_BOTTOM, False)
+        self.world.set_wall(0, 1, SIDE_RIGHT, False)
+        self.world.set_wall(0, 1, SIDE_BOTTOM, False)
+        self.world.set_wall(1, 1, SIDE_RIGHT, False)
+        self.world.set_wall(1, 1, SIDE_BOTTOM, False)
+        self.world.set_wall(2, 1, SIDE_BOTTOM, False)
+        self.world.set_wall(4, 1, SIDE_BOTTOM, False)
 
-        world.set_wall(0, 2, SIDE_RIGHT, False)
-        world.set_wall(2, 2, SIDE_RIGHT, False)
-        world.set_wall(3, 2, SIDE_RIGHT, False)
+        self.world.set_wall(0, 2, SIDE_RIGHT, False)
+        self.world.set_wall(2, 2, SIDE_RIGHT, False)
+        self.world.set_wall(3, 2, SIDE_RIGHT, False)
 
-        self.planner = PlannerSuperPosition(world)
+        self.planner = PlannerSuperPosition(self.world)
         self.planner.populate_all()
 
     def publishVelocityCommand(self, linearVelocity, angularVelocity):
@@ -95,6 +96,7 @@ class Turtlebot3Controller(Node):
         # self.get_logger().info('Publishing cmd_vel: "%s", "%s"' % linearVelocity, angularVelocity)
 
     def scanCallback(self, msg):
+        self.laser_distance_available = True
         self.valueLaserRanges = list(msg.ranges)
 
     def batteryStateCallback(self, msg):
@@ -113,6 +115,9 @@ class Turtlebot3Controller(Node):
         self.valueRotation = math.atan2(siny_cosp, cosy_cosp)
 
     def timerCallback(self):
+        if not self.laser_distance_available:
+            return
+
         self.tick_counter += 1
         ros_pos = Vector(self.valuePosition.x, self.valuePosition.y)
         distance_left = angle_distance(self.valueLaserRanges, 90 - 5, 90 + 5)
@@ -127,6 +132,8 @@ class Turtlebot3Controller(Node):
                 self.controller.tick(ros_pos, self.valueRotation, self.valueLaserRanges)
             except Exception as ex:
                 print(ex)
+                print("sensor", distance_left, distance_top, distance_right)
+                print("near", near_left, near_top, near_right)
                 self.planner.validate(near_left, near_top, near_right)
                 if not near_top:
                     self.controller.enqueue(MC_FWD)
@@ -200,3 +207,4 @@ if __name__ == '__main__':
 # flak emplacement stab_checker
 # flak emplacement planner
 # flak emplacement planner_position
+# flak emplacement planner_superposition
